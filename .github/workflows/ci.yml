@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_CLIENT: ghcr.io/${{ github.repository_owner }}/icx-portal-client
-  IMAGE_SERVER: ghcr.io/${{ github.repository_owner }}/icx-portal-server
+  IMAGE_CLIENT: ghcr.io/infinia-technology/icx-portal-client
+  IMAGE_SERVER: ghcr.io/infinia-technology/icx-portal-server
 
 jobs:
   build-client:
@@ -109,9 +109,9 @@ jobs:
         env:
           TAG: ${{ needs.build-client.outputs.image_tag }}
         run: |
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/icx-portal-client:.*|image: ghcr.io/${{ github.repository_owner }}/icx-portal-client:${TAG}|g" icx-portal/k8s/base/client.yaml
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/icx-portal-server:.*|image: ghcr.io/${{ github.repository_owner }}/icx-portal-server:${TAG}|g" icx-portal/k8s/base/server.yaml
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/icx-portal-server:.*|image: ghcr.io/${{ github.repository_owner }}/icx-portal-server:${TAG}|g" icx-portal/k8s/jobs/seed-job.yaml
+          sed -i "s|image: ghcr.io/infinia-technology/icx-portal-client:.*|image: ghcr.io/infinia-technology/icx-portal-client:${TAG}|g" icx-portal/k8s/base/client.yaml
+          sed -i "s|image: ghcr.io/infinia-technology/icx-portal-server:.*|image: ghcr.io/infinia-technology/icx-portal-server:${TAG}|g" icx-portal/k8s/base/server.yaml
+          sed -i "s|image: ghcr.io/infinia-technology/icx-portal-server:.*|image: ghcr.io/infinia-technology/icx-portal-server:${TAG}|g" icx-portal/k8s/jobs/seed-job.yaml
 
       - name: Commit and push manifest changes
         run: |
