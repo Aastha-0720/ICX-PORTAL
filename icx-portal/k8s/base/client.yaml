@@ -23,7 +23,7 @@ spec:
         - name: ghcr-credentials        # created by vault-ghcr CSI volume mount below
       containers:
         - name: client
-          image: ghcr.io/infinia-technology/icx-portal-client:latest   # updated by CI
+          image: ghcr.io/infinia-technology/icx-portal-client:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

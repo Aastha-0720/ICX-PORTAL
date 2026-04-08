@@ -20,7 +20,7 @@ spec:
         - name: ghcr-credentials   # created by ghcr CSI volume mount below
       containers:
         - name: seed
-          image: ghcr.io/infinia-technology/icx-portal-server:latest   # pin to a specific tag if needed
+          image: ghcr.io/infinia-technology/icx-portal-server:latest
           command: ["node", "src/scripts/seed.js"]
           envFrom:
             - configMapRef:
