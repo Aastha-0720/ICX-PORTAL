@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: icx-portal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      serviceAccountName: icx-portal   # must match Vault role bound_service_account_names
+      imagePullSecrets:
+        - name: ghcr-credentials        # created by vault-ghcr CSI volume mount below
+      containers:
+        - name: server
+          image: ghcr.io/YOUR_GITHUB_USERNAME/icx-portal-server:latest   # updated by CI
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: icx-portal-config   # non-secret env vars
+            - secretRef:
+                name: icx-portal-secret   # created by vault-secrets CSI volume mount below
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault-secrets
+              readOnly: true
+            - name: vault-ghcr-secrets
+              mountPath: /mnt/vault-ghcr-secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: vault-icx-portal   # defined in overlays/prod/
+        - name: vault-ghcr-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: vault-ghcr          # defined in overlays/prod/
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: icx-portal
+spec:
+  selector:
+    app: server
+  ports:
+    - port: 5000
+      targetPort: 5000
