@@ -26,6 +26,7 @@ spec:
       labels:
         app: minio
     spec:
+      serviceAccountName: icx-portal   # must match Vault role
       containers:
         - name: minio
           image: minio/minio
@@ -35,12 +36,8 @@ spec:
               containerPort: 9000
             - name: console
               containerPort: 9001
-          # MinIO root creds — store real values in Vault at secret/data/minio
-          # and add a SecretProviderClass + CSI mount here if you want full Vault coverage.
-          # For now these are read from a K8s Secret created via:
-          #   kubectl create secret generic minio-secret -n icx-portal \
-          #     --from-literal=root-user=YOUR_USER \
-          #     --from-literal=root-password=YOUR_PASSWORD
+          # Root creds pulled from Vault via CSI — minio-secret K8s Secret is
+          # auto-created when the pod mounts the vault-minio-secrets volume below
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -55,6 +52,9 @@ spec:
           volumeMounts:
             - name: minio-data
               mountPath: /data
+            - name: vault-minio-secrets
+              mountPath: /mnt/vault-minio-secrets
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /minio/health/live
@@ -79,6 +79,12 @@ spec:
         - name: minio-data
           persistentVolumeClaim:
             claimName: minio-pvc
+        - name: vault-minio-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: vault-minio   # defined in overlays/prod/
 ---
 apiVersion: v1
 kind: Service
