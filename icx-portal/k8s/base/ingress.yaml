@@ -26,10 +26,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - YOUR_DOMAIN   # e.g. portal.iamsaif.ai
+        - icx.iamsaif.ai   # e.g. portal.iamsaif.ai
       secretName: icx-portal-tls   # cert-manager stores the cert here
   rules:
-    - host: YOUR_DOMAIN
+    - host: icx.iamsaif.ai
       http:
         paths:
           # All traffic → nginx container in client pod

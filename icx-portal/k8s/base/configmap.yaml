@@ -14,4 +14,4 @@ data:
   S3_BUCKET: icx-uploads
   MAX_FILE_SIZE_MB: "10"
   EMAIL_FROM: support@iamsaif.ai
-  CLIENT_URL: https://YOUR_DOMAIN   # replace with your domain
+  CLIENT_URL: https://icx.iamsaif.ai
