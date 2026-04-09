@@ -4,6 +4,7 @@ const Otp = require('../models/Otp');
 
 const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES) || 5;
 const MAX_ATTEMPTS = 3;
+const RESEND_COOLDOWN_SECONDS = parseInt(process.env.OTP_RESEND_COOLDOWN) || 60;
 
 const generateOtp = () => {
   return crypto.randomInt(100000, 999999).toString();
@@ -57,4 +58,18 @@ const verifyOtp = async (email, code) => {
   return { valid: true, purpose: otp.purpose };
 };
 
-module.exports = { createOtp, verifyOtp };
+const canResendOtp = async (email) => {
+  const lastOtp = await Otp.findOne({ email: email.toLowerCase() }).sort({ createdAt: -1 });
+
+  if (!lastOtp) return { allowed: true };
+
+  const elapsed = (Date.now() - lastOtp.createdAt.getTime()) / 1000;
+  if (elapsed < RESEND_COOLDOWN_SECONDS) {
+    const wait = Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed);
+    return { allowed: false, retryAfter: wait };
+  }
+
+  return { allowed: true };
+};
+
+module.exports = { createOtp, verifyOtp, canResendOtp, RESEND_COOLDOWN_SECONDS };

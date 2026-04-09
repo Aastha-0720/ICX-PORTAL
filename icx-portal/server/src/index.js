@@ -22,6 +22,9 @@ const accountRoutes = require('./routes/account.routes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust proxy (nginx in Docker)
+app.set('trust proxy', 1);
+
 // Connect to MongoDB
 connectDB();
 

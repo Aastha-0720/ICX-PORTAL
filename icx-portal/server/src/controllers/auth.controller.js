@@ -1,7 +1,7 @@
 const { z } = require('zod');
 const User = require('../models/User');
 const Organization = require('../models/Organization');
-const { createOtp, verifyOtp } = require('../services/otp.service');
+const { createOtp, verifyOtp, canResendOtp, RESEND_COOLDOWN_SECONDS } = require('../services/otp.service');
 const { sendOtpEmail, sendRegistrationConfirmation } = require('../services/email.service');
 const { signToken } = require('../services/jwt.service');
 const { logAction } = require('../services/audit.service');
@@ -47,15 +47,91 @@ const customerRegisterSchema = z.object({
   urgency: z.string().optional(),
 });
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+// --- Dynamic role assignment ---
+// Maps registration context to a user role. Easy to extend with new roles.
+const VENDOR_ROLE_MAP = {
+  'Broker': 'broker',
+  'Advisor': 'broker',
+  'Other Intermediary': 'broker',
+  // All other vendor types default to 'supplier'
+};
+
+const REGISTRATION_TYPE_ROLE_MAP = {
+  supplier: 'supplier',   // default for supplier registration
+  customer: 'customer',
+};
+
+function resolveRole(registrationType, vendorType) {
+  if (registrationType === 'supplier' && vendorType) {
+    return VENDOR_ROLE_MAP[vendorType] || 'supplier';
+  }
+  return REGISTRATION_TYPE_ROLE_MAP[registrationType] || 'supplier';
+}
+
+function resolveOrgType(role) {
+  const ORG_TYPE_MAP = { broker: 'BROKER', supplier: 'SUPPLIER', customer: 'CUSTOMER' };
+  return ORG_TYPE_MAP[role] || 'SUPPLIER';
+}
+
 // POST /api/auth/otp/request
 const requestOtp = async (req, res, next) => {
   try {
     const { email } = otpRequestSchema.parse(req.body);
 
     const { plainCode } = await createOtp(email, 'login');
-    await sendOtpEmail(email, plainCode);
 
-    res.json({ message: 'OTP sent to your email' });
+    if (isDev) {
+      console.log(`[DEV] OTP for ${email}: ${plainCode}`);
+    }
+
+    // Attempt email delivery; in dev mode, don't fail if email can't be sent
+    try {
+      await sendOtpEmail(email, plainCode);
+    } catch (emailErr) {
+      console.error('[EMAIL] Failed to send OTP:', emailErr.message);
+      if (!isDev) throw emailErr;
+    }
+
+    logAction({ action: 'OTP_REQUESTED', changes: { email }, ipAddress: req.ip }).catch(() => {});
+
+    res.json({ message: 'OTP sent to your email', cooldown: RESEND_COOLDOWN_SECONDS });
+  } catch (err) {
+    logAction({ action: 'OTP_REQUEST_FAILED', changes: { email: req.body?.email, error: err.message }, ipAddress: req.ip }).catch(() => {});
+    next(err);
+  }
+};
+
+// POST /api/auth/otp/resend
+const resendOtp = async (req, res, next) => {
+  try {
+    const { email } = otpRequestSchema.parse(req.body);
+
+    const { allowed, retryAfter } = await canResendOtp(email);
+    if (!allowed) {
+      return res.status(429).json({
+        error: `Please wait ${retryAfter} seconds before requesting a new code`,
+        retryAfter,
+      });
+    }
+
+    const { plainCode } = await createOtp(email, 'login');
+
+    if (isDev) {
+      console.log(`[DEV] OTP for ${email}: ${plainCode}`);
+    }
+
+    try {
+      await sendOtpEmail(email, plainCode);
+    } catch (emailErr) {
+      console.error('[EMAIL] Failed to resend OTP:', emailErr.message);
+      if (!isDev) throw emailErr;
+    }
+
+    logAction({ action: 'OTP_RESENT', changes: { email }, ipAddress: req.ip }).catch(() => {});
+
+    res.json({ message: 'OTP resent to your email', cooldown: RESEND_COOLDOWN_SECONDS });
   } catch (err) {
     next(err);
   }
@@ -68,8 +144,11 @@ const verifyOtpHandler = async (req, res, next) => {
 
     const result = await verifyOtp(email, code);
     if (!result.valid) {
+      logAction({ action: 'OTP_VERIFY_FAILED', changes: { email, reason: result.error }, ipAddress: req.ip }).catch(() => {});
       return res.status(400).json({ error: result.error });
     }
+
+    logAction({ action: 'OTP_VERIFIED', changes: { email }, ipAddress: req.ip }).catch(() => {});
 
     const user = await User.findOne({ email });
 
@@ -135,10 +214,9 @@ const registerSupplier = async (req, res, next) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
-    // Determine role: broker types get 'broker' role
-    const isBroker = ['Broker', 'Advisor', 'Other Intermediary'].includes(data.vendorType);
-    const role = isBroker ? 'broker' : 'supplier';
-    const orgType = isBroker ? 'BROKER' : 'SUPPLIER';
+    // Dynamic role assignment based on vendor type
+    const role = resolveRole('supplier', data.vendorType);
+    const orgType = resolveOrgType(role);
 
     const org = await Organization.create({
       type: orgType,
@@ -199,8 +277,10 @@ const registerCustomer = async (req, res, next) => {
       return res.status(409).json({ error: 'An account with this email already exists' });
     }
 
+    const role = resolveRole('customer');
+
     const org = await Organization.create({
-      type: 'CUSTOMER',
+      type: resolveOrgType(role),
       status: 'KYC_SUBMITTED',
       companyName: data.companyName,
       companyType: data.companyType,
@@ -224,7 +304,7 @@ const registerCustomer = async (req, res, next) => {
 
     const user = await User.create({
       email: data.email,
-      role: 'customer',
+      role,
       organizationId: org._id,
     });
 
@@ -243,7 +323,7 @@ const registerCustomer = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
-    await sendRegistrationConfirmation(data.email, 'customer').catch(console.error);
+    await sendRegistrationConfirmation(data.email, role).catch(console.error);
 
     res.status(201).json({
       token,
@@ -287,4 +367,4 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { requestOtp, verifyOtpHandler, registerSupplier, registerCustomer, getMe };
+module.exports = { requestOtp, resendOtp, verifyOtpHandler, registerSupplier, registerCustomer, getMe };

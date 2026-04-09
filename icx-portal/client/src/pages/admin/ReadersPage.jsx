@@ -108,7 +108,7 @@ export default function ReadersPage() {
         <DataTable columns={columns} data={readers} />
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Reader Account">
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Create Reader Account">
         <div className="space-y-4">
           <Input label="Email Address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="reader@company.com" />
           <p className="text-xs text-gray-500">A welcome email with login instructions will be sent automatically.</p>

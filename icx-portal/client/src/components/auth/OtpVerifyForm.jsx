@@ -1,16 +1,28 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Button from '../ui/Button';
 import { useApi } from '../../hooks/useApi';
+
+const INITIAL_COOLDOWN = 60;
 
 export default function OtpVerifyForm({ email, onVerified, onBack }) {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
+  const [resendMsg, setResendMsg] = useState('');
+  const [cooldown, setCooldown] = useState(INITIAL_COOLDOWN);
   const { loading, post } = useApi();
+  const [resending, setResending] = useState(false);
   const inputRefs = useRef([]);
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
   }, []);
+
+  // Countdown timer
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleChange = (index, value) => {
     if (!/^\d?$/.test(value)) return;
@@ -50,9 +62,34 @@ export default function OtpVerifyForm({ email, onVerified, onBack }) {
       const data = await post('/auth/otp/verify', { email, code: fullCode });
       onVerified(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Verification failed');
+      const msg = err.response?.data?.error || 'Verification failed';
+      setError(msg);
     }
   };
+
+  const handleResend = useCallback(async () => {
+    setResending(true);
+    setError('');
+    setResendMsg('');
+
+    try {
+      const data = await post('/auth/otp/resend', { email });
+      setCooldown(data.cooldown || INITIAL_COOLDOWN);
+      setResendMsg('New code sent to your email');
+      setCode(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (err) {
+      const resp = err.response?.data;
+      if (resp?.retryAfter) {
+        setCooldown(resp.retryAfter);
+        setError(`Please wait ${resp.retryAfter}s before resending`);
+      } else {
+        setError(resp?.error || 'Failed to resend code');
+      }
+    } finally {
+      setResending(false);
+    }
+  }, [email, post]);
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -81,10 +118,28 @@ export default function OtpVerifyForm({ email, onVerified, onBack }) {
       </div>
 
       {error && <p className="text-sm text-[var(--color-error)] text-center">{error}</p>}
+      {resendMsg && <p className="text-sm text-green-600 text-center">{resendMsg}</p>}
 
       <Button type="submit" loading={loading} className="w-full">
         Verify Code
       </Button>
+
+      <div className="text-center">
+        {cooldown > 0 ? (
+          <p className="text-sm text-[var(--color-text-secondary)]">
+            Resend code in <span className="font-semibold">{cooldown}s</span>
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={handleResend}
+            disabled={resending}
+            className="text-sm font-medium text-[var(--color-primary)] hover:underline disabled:opacity-50"
+          >
+            {resending ? 'Sending...' : 'Resend Code'}
+          </button>
+        )}
+      </div>
 
       <button
         type="button"

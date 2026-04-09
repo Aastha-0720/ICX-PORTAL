@@ -4,6 +4,7 @@ const { otpRequestLimiter, otpVerifyLimiter } = require('../middleware/rateLimit
 const authenticate = require('../middleware/auth');
 const {
   requestOtp,
+  resendOtp,
   verifyOtpHandler,
   registerSupplier,
   registerCustomer,
@@ -11,6 +12,7 @@ const {
 } = require('../controllers/auth.controller');
 
 router.post('/otp/request', otpRequestLimiter, requestOtp);
+router.post('/otp/resend', otpRequestLimiter, resendOtp);
 router.post('/otp/verify', otpVerifyLimiter, verifyOtpHandler);
 router.post('/register/supplier', registerSupplier);
 router.post('/register/customer', registerCustomer);
