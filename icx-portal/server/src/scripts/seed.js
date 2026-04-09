@@ -13,6 +13,35 @@ const DcApplication = require('../models/DcApplication');
 const DcSite = require('../models/DcSite');
 const GpuClusterListing = require('../models/GpuClusterListing');
 
+// --- Dynamic role resolution (same logic as auth.controller.js) ---
+const BROKER_VENDOR_TYPES = ['Broker', 'Advisor', 'Other Intermediary'];
+function resolveRole(vendorType) {
+  return BROKER_VENDOR_TYPES.includes(vendorType) ? 'broker' : 'supplier';
+}
+function resolveOrgType(vendorType) {
+  return BROKER_VENDOR_TYPES.includes(vendorType) ? 'BROKER' : 'SUPPLIER';
+}
+
+// --- Configurable seed emails (override via env vars or CLI) ---
+const SEED_EMAILS = {
+  superadmin: process.env.SEED_SUPERADMIN_EMAIL || 'deepanshu.gupta@netgroup.ai',
+  admin:      process.env.SEED_ADMIN_EMAIL      || 'Aastha.Pradhan@apeiro.digital',
+  supplier:   process.env.SEED_SUPPLIER_EMAIL    || 'aastharani07@gmail.com',
+  broker:     process.env.SEED_BROKER_EMAIL      || 'broker@test.com',
+  customer:   process.env.SEED_CUSTOMER_EMAIL    || 'Support@iamsaif.ai',
+  reader:     process.env.SEED_READER_EMAIL      || 'reader@test.com',
+  viewer:     process.env.SEED_VIEWER_EMAIL      || 'viewer@test.com',
+  subordinate:process.env.SEED_SUBORDINATE_EMAIL || 'subordinate@test.com',
+  pending:    process.env.SEED_PENDING_EMAIL     || 'pending@test.com',
+};
+
+// --- Configurable vendor types (override to change role assignment) ---
+const SEED_VENDOR_TYPES = {
+  supplier: process.env.SEED_SUPPLIER_VENDOR_TYPE || 'Operator',
+  broker:   process.env.SEED_BROKER_VENDOR_TYPE   || 'Broker',
+  pending:  process.env.SEED_PENDING_VENDOR_TYPE  || 'Developer',
+};
+
 async function seed() {
   await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/icx');
   console.log('Connected to MongoDB');
@@ -27,19 +56,19 @@ async function seed() {
   ]);
   console.log('Cleared existing data');
 
-  // Create orgs
+  // Create orgs — roles derived dynamically from vendorType
   const supplierOrg = await Organization.create({
-    type: 'SUPPLIER', status: 'APPROVED',
-    vendorType: 'Operator', mandateStatus: 'Direct',
+    type: resolveOrgType(SEED_VENDOR_TYPES.supplier), status: 'APPROVED',
+    vendorType: SEED_VENDOR_TYPES.supplier, mandateStatus: 'Direct',
     ndaRequired: false, ndaSigned: false,
-    contactEmail: 'supplier@test.com', contactNumber: '+971501234567',
+    contactEmail: SEED_EMAILS.supplier, contactNumber: '+971501234567',
   });
 
   const brokerOrg = await Organization.create({
-    type: 'BROKER', status: 'APPROVED',
-    vendorType: 'Broker', mandateStatus: 'Non-exclusive',
+    type: resolveOrgType(SEED_VENDOR_TYPES.broker), status: 'APPROVED',
+    vendorType: SEED_VENDOR_TYPES.broker, mandateStatus: 'Non-exclusive',
     ndaRequired: true, ndaSigned: true,
-    contactEmail: 'broker@test.com', contactNumber: '+971502345678',
+    contactEmail: SEED_EMAILS.broker, contactNumber: '+971502345678',
   });
 
   const customerOrg = await Organization.create({
@@ -49,28 +78,28 @@ async function seed() {
     taxVatNumber: 'UAE123456789', companyAddress: 'Dubai, UAE',
     authSignatoryName: 'John Smith', authSignatoryTitle: 'CEO',
     billingContactName: 'Jane Smith', billingContactEmail: 'billing@acme.com',
-    contactEmail: 'Support@iamsaif.ai',
+    contactEmail: SEED_EMAILS.customer,
     primaryUseCases: ['AI/ML Training', 'HPC'],
   });
 
   const pendingSupplierOrg = await Organization.create({
-    type: 'SUPPLIER', status: 'KYC_SUBMITTED',
-    vendorType: 'Developer', mandateStatus: 'Exclusive',
+    type: resolveOrgType(SEED_VENDOR_TYPES.pending), status: 'KYC_SUBMITTED',
+    vendorType: SEED_VENDOR_TYPES.pending, mandateStatus: 'Exclusive',
     ndaRequired: false, ndaSigned: false,
-    contactEmail: 'pending@test.com',
+    contactEmail: SEED_EMAILS.pending,
   });
 
-  // Create users
+  // Create users — supplier/broker roles derived from org vendorType
   const users = await User.insertMany([
-    { email: 'deepanshu.gupta@netgroup.ai', role: 'superadmin' },
-    { email: 'Aastha.Pradhan@apeiro.digital', role: 'admin' },
-    { email: 'supplier@test.com', role: 'supplier', organizationId: supplierOrg._id },
-    { email: 'broker@test.com', role: 'broker', organizationId: brokerOrg._id },
-    { email: 'Support@iamsaif.ai', role: 'customer', organizationId: customerOrg._id },
-    { email: 'reader@test.com', role: 'reader' },
-    { email: 'viewer@test.com', role: 'viewer' },
-    { email: 'subordinate@test.com', role: 'subordinate', organizationId: supplierOrg._id },
-    { email: 'pending@test.com', role: 'supplier', organizationId: pendingSupplierOrg._id },
+    { email: SEED_EMAILS.superadmin, role: 'superadmin' },
+    { email: SEED_EMAILS.admin, role: 'admin' },
+    { email: SEED_EMAILS.supplier, role: resolveRole(supplierOrg.vendorType), organizationId: supplierOrg._id },
+    { email: SEED_EMAILS.broker, role: resolveRole(brokerOrg.vendorType), organizationId: brokerOrg._id },
+    { email: SEED_EMAILS.customer, role: 'customer', organizationId: customerOrg._id },
+    { email: SEED_EMAILS.reader, role: 'reader' },
+    { email: SEED_EMAILS.viewer, role: 'viewer' },
+    { email: SEED_EMAILS.subordinate, role: 'subordinate', organizationId: supplierOrg._id },
+    { email: SEED_EMAILS.pending, role: resolveRole(pendingSupplierOrg.vendorType), organizationId: pendingSupplierOrg._id },
   ]);
   console.log(`Created ${users.length} users`);
 
@@ -136,15 +165,7 @@ async function seed() {
 
   console.log('\n=== SEED COMPLETE ===');
   console.log('\nTest user credentials (use OTP login — any 6-digit code works in dev):');
-  console.log('  deepanshu.gupta@netgroup.ai  — Superadmin');
-  console.log('  Aastha.Pradhan@apeiro.digital — Admin');
-  console.log('  supplier@test.com    — Approved Supplier');
-  console.log('  broker@test.com      — Approved Broker');
-  console.log('  Support@iamsaif.ai    — Approved Customer');
-  console.log('  reader@test.com      — Reader');
-  console.log('  viewer@test.com      — Viewer');
-  console.log('  subordinate@test.com — Subordinate (under supplier)');
-  console.log('  pending@test.com     — Pending Supplier (KYC submitted)');
+  users.forEach((u) => console.log(`  ${u.email} — ${u.role}`));
 
   await mongoose.disconnect();
 }

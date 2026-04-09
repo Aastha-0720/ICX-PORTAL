@@ -94,7 +94,7 @@ export default function UsersPage() {
 
       <DataTable columns={columns} data={users} />
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create User">
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Create User">
         <div className="space-y-4">
           <Input label="Email" type="email" value={newUser.email} onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))} />
           <Select label="Role" value={newUser.role} onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value }))} options={ROLES.map((r) => ({ value: r, label: r }))} />
