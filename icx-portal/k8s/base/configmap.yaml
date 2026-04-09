@@ -15,3 +15,5 @@ data:
   MAX_FILE_SIZE_MB: "10"
   EMAIL_FROM: support@iamsaif.ai
   CLIENT_URL: https://icx.iamsaif.ai
+  # Force IPv4 DNS — Node.js fetch (undici) prefers IPv6 which times out on this cluster
+  NODE_OPTIONS: --dns-result-order=ipv4first
