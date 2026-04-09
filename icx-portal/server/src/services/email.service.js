@@ -2,11 +2,15 @@ const resend = require('../config/resend');
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'support@iamsaif.ai';
 
-const sendEmail = async (to, subject, html) => {
+const sendEmail = async (to, subject, html, attempt = 1) => {
   const { data, error } = await resend.emails.send({ from: EMAIL_FROM, to, subject, html });
 
   if (error) {
-    console.error('[EMAIL] Send failed:', { to, subject, error });
+    console.error('[EMAIL] Send failed:', { to, subject, attempt, error });
+    if (attempt < 3) {
+      await new Promise(r => setTimeout(r, attempt * 1000));
+      return sendEmail(to, subject, html, attempt + 1);
+    }
     throw new Error(`Email delivery failed: ${error.message}`);
   }
 
