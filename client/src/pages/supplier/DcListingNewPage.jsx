@@ -187,13 +187,48 @@ export default function DcListingNewPage() {
     updateUrl(null, null, prevStep);
   };
 
+  // Helper to sanitize data for JSON serialization
+  const sanitizeData = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+
+    const sanitized = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // Skip functions and undefined
+      if (typeof value === 'function' || value === undefined) continue;
+
+      // Skip objects that look like DOM elements or React internals
+      if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+        if ('nodeType' in value || '__reactFiber' in value || '__reactProps' in value) continue;
+        // Skip other complex objects that aren't plain objects
+        if (value.constructor && value.constructor.name !== 'Object') continue;
+      }
+
+      // Handle arrays - filter out complex objects
+      if (Array.isArray(value)) {
+        sanitized[key] = value.filter(v => {
+          if (typeof v === 'function') return false;
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+            if ('nodeType' in v || '__reactFiber' in v) return false;
+          }
+          return typeof v !== 'function';
+        });
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  };
+
   const submit = async (force = false) => {
     setSubmitting(true);
     try {
       // Save company details (step1) before submitting
       if (appId && step1.companyLegalEntity) {
         try {
-          await api.put(`/dc-applications/${appId}`, step1);
+          const company = sanitizeData(step1);
+          // Ensure JSON serializable by round-tripping through JSON.stringify
+          const companyClean = JSON.parse(JSON.stringify(company));
+          await api.put(`/dc-applications/${appId}`, companyClean);
         } catch (err) {
           addToast({ type: 'error', message: `Failed to save company details: ${err.response?.data?.error || err.message}` });
           setSubmitting(false);
@@ -203,9 +238,11 @@ export default function DcListingNewPage() {
 
       // Save all site data before submitting
       if (siteId && appId) {
-        const siteData = { ...step2, ...step3, ...step4, ...step5, ...step6, ...step7, ...step9, ...step8 };
         try {
-          await api.put(`/dc-applications/${appId}/sites/${siteId}`, siteData);
+          const siteData = sanitizeData({ ...step2, ...step3, ...step4, ...step5, ...step6, ...step7, ...step9, ...step8 });
+          // Ensure JSON serializable by round-tripping through JSON.stringify
+          const siteDataClean = JSON.parse(JSON.stringify(siteData));
+          await api.put(`/dc-applications/${appId}/sites/${siteId}`, siteDataClean);
         } catch (err) {
           addToast({ type: 'error', message: `Failed to save site data: ${err.response?.data?.error || err.message}` });
           setSubmitting(false);
