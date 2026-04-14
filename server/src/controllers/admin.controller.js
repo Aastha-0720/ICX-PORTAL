@@ -184,20 +184,43 @@ const getListings = async (req, res, next) => {
     const result = await paginatePrisma(prisma.listing, where, page, limit, { organization: true });
 
     // Map database fields to frontend camelCase
-    result.data = result.data.map(listing => ({
-      ...listing,
-      _id: listing.id,
-      companyLegalEntity: listing.organization?.company_name || listing.data_center_name || '—',
-      contactEmail: listing.organization?.contact_email || '—',
-      submittedAt: listing.created_at,
-      createdAt: listing.created_at,
-      updatedAt: listing.updated_at,
-      dataCenterName: listing.data_center_name,
-      totalUnits: listing.total_units,
-      availableUnits: listing.available_units,
-      isArchived: listing.archived_at ? true : false,
-      lastActivityAt: listing.updated_at
-    }));
+    result.data = result.data.map(listing => {
+      const baseMapping = {
+        ...listing,
+        _id: listing.id,
+        companyLegalEntity: listing.organization?.company_name || listing.data_center_name || '—',
+        contactEmail: listing.organization?.contact_email || '—',
+        submittedAt: listing.created_at,
+        createdAt: listing.created_at,
+        updatedAt: listing.updated_at,
+        dataCenterName: listing.data_center_name,
+        totalUnits: listing.total_units,
+        availableUnits: listing.available_units,
+        isArchived: listing.archived_at ? true : false,
+        lastActivityAt: listing.updated_at
+      };
+
+      // Flatten specifications for GPU listings
+      if (listing.type === 'GPU_CLUSTER' && listing.specifications) {
+        return {
+          ...baseMapping,
+          vendorName: listing.specifications.gpuServerModel || listing.data_center_name || '—',
+          gpuTechnology: listing.specifications.gpuTechnology || '—',
+          singleClusterSize: listing.specifications.singleClusterSize || null,
+          country: listing.country || '—'
+        };
+      }
+
+      // For DC listings
+      if (listing.type === 'DC_SITE') {
+        return {
+          ...baseMapping,
+          country: listing.country || '—'
+        };
+      }
+
+      return baseMapping;
+    });
 
     res.json(result);
   } catch (err) { next(err); }
