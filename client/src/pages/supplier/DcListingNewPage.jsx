@@ -190,6 +190,17 @@ export default function DcListingNewPage() {
   const submit = async (force = false) => {
     setSubmitting(true);
     try {
+      // Save company details (step1) before submitting
+      if (appId && step1.companyLegalEntity) {
+        await api.put(`/dc-applications/${appId}`, step1);
+      }
+
+      // Save all site data before submitting
+      if (siteId && appId) {
+        const siteData = { ...step2, ...step3, ...step4, ...step5, ...step6, ...step7, ...step9, ...step8 };
+        await api.put(`/dc-applications/${appId}/sites/${siteId}`, siteData);
+      }
+
       const res = await api.post(`/dc-applications/${appId}/submit`, { force });
 
       // If duplicates found, show modal instead of submitting
