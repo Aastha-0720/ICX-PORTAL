@@ -4,7 +4,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - configmap.yaml
-  - mongodb.yaml
+  - postgres.yaml
   - minio.yaml
   - server.yaml
   - client.yaml
