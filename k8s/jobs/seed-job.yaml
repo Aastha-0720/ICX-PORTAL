@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: icx-portal-seed
+  namespace: icx-portal
+  annotations:
+    # Bump this value to re-run the seed (e.g. run-2, run-3)
+    # kubectl apply -f k8s/jobs/seed-job.yaml after editing
+    seed-run: "run-3"
+spec:
+  # Do not retry on failure — seed failures should be investigated manually
+  backoffLimit: 0
+  # Clean up the completed/failed job after 1 hour
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      serviceAccountName: icx-portal
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-credentials   # created by ghcr CSI volume mount below
+      containers:
+        - name: seed
+          image: ghcr.io/infinia-technology/icx-portal-server:latest
+          command: ["node", "src/scripts/seed.js"]
+          envFrom:
+            - configMapRef:
+                name: icx-portal-config   # provides NODE_ENV, PORT and other non-secret vars
+            - secretRef:
+                name: icx-portal-secret   # provides JWT_SECRET etc. (created by vault CSI below)
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /mnt/vault-secrets
+              readOnly: true
+            - name: vault-ghcr-secrets
+              mountPath: /mnt/vault-ghcr-secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: vault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: vault-icx-portal
+        - name: vault-ghcr-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: vault-ghcr

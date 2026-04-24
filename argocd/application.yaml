@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: icx-portal
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Infinia-Technology/ICX-PORTAL
+    targetRevision: main
+    path: k8s/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc   # prod cluster (in-cluster)
+    namespace: icx-portal
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    # Sync is manual — trigger from ArgoCD UI or CLI after CI updates image tags
+    # To enable auto-sync uncomment below:
+    automated:
+      prune: true
+      selfHeal: true
